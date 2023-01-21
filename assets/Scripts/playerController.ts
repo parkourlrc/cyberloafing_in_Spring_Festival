@@ -133,7 +133,7 @@ export class playerController extends Component {
             this.player.node.position = v3(this.x1+100,this.y1, this.z1);
             */
             tween(this.player.node)
-                .by(0.2,{ position:v3(100, 0, 0)})
+                .by(0.01,{ position:v3(100, 0, 0)})
                 //.to(0.2,{ position:v3(this.player.node.position.x+100, this.player.node.position.y, this.player.node.position.z)})
                 .start()
             this.player.node.eulerAngles =  v3(0, 0, this.turn > 0 ? 0 : -20);
@@ -146,7 +146,7 @@ export class playerController extends Component {
             this.player.node.setPosition (this.x1-100,this.y1, this.z1);
             */
             tween(this.player.node)
-                .by(0.2,{ position:v3(-100, 0, 0)})
+                .by(0.01,{ position:v3(-100, 0, 0)})
                 //.to(0.2,{ position:v3(this.player.node.position.x-100, this.player.node.position.y, this.player.node.position.z)})
                 .start()
 
@@ -185,3 +185,4 @@ export class playerController extends Component {
     }
  
 }
+

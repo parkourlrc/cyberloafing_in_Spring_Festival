@@ -1,4 +1,4 @@
-import { _decorator, Component,  input, Input, Vec3, Prefab, instantiate, view, macro, tween, v2,Node, CCInteger,NodePool,Vec2, v3,director,log } from 'cc';
+import { _decorator, Component,  Contact2DType, sys, PhysicsSystem2D, Label, Collider2D, IPhysics2DContact, Input, Vec3, Prefab, instantiate, view, macro, tween, v2,Node, CCInteger,NodePool,Vec2, v3,director,log } from 'cc';
 import { playerController } from "./playerController";
 const { ccclass, property } = _decorator;
 
@@ -19,14 +19,12 @@ export class GameManager extends Component {
 
     private static instance: GameManager;
     private gameState: GameState;//游戏状态
-    private score: number;//分数
+    @property(CCInteger)
+    score: number = 0;//分数
     private highestScore: number;//最高分数
-
+    //主角控制器
     @property({type: playerController})
     public playerCtrl: playerController | null = null;
-
-    @property({type: Node})
-    public startMenu: Node | null = null;
     // 赛道预制
     @property({type: Prefab})
     public trackPrfb: Prefab | null = null;
@@ -34,15 +32,18 @@ export class GameManager extends Component {
     @property
     public roadLength = 50;
     private _road: TrackType[] = [];
-
+    //障碍预制体
     @property(Prefab)
     obstaclePrefab: Prefab = null;
-
+    //障碍数
     @property(CCInteger)
-    obstacleCount: number = 100;
-
+    obstacleCount: number = 1000;
+    //赛道数
     @property(CCInteger)
     trackCount: number = 5;
+    //不断记录本局的分数
+    @property({type: Label})
+    public stepsLabel: Label | null = null;
 
     private trackPositions: Vec2[] = [];
     private obstaclePool: NodePool = new NodePool();
@@ -85,7 +86,7 @@ export class GameManager extends Component {
             this.highestScore = this.score;
         }
     }
-
+/** 
     public getScore(): number {
         let score = 0;
         let scheduler = director.getScheduler();
@@ -95,7 +96,7 @@ export class GameManager extends Component {
         }, this, 0.2, macro.REPEAT_FOREVER, 0, false);
         return this.score;
     }
-
+*/
     public getHighestScore(): number {
         return this.highestScore;
     }
@@ -108,46 +109,69 @@ export class GameManager extends Component {
         this.startGame();
     }
 
-
     start () {
         this.curState = GameState.START;
+        //碰撞
+    // 注册单个碰撞体的回调函数
+        let collider = this.getComponent(Collider2D);
+        if (collider) {
+            collider.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+            collider.on(Contact2DType.END_CONTACT, this.onEndContact, this);
+            //collider.on(Contact2DType.PRE_SOLVE, this.onPreSolve, this);
+            //collider.on(Contact2DType.POST_SOLVE, this.onPostSolve, this);
+        }
+
+        // 注册全局碰撞回调函数
+        if (PhysicsSystem2D.instance) {
+            PhysicsSystem2D.instance.on(Contact2DType.BEGIN_CONTACT, this.onBeginContact, this);
+            PhysicsSystem2D.instance.on(Contact2DType.END_CONTACT, this.onEndContact, this);
+            //PhysicsSystem2D.instance.on(Contact2DType.PRE_SOLVE, this.onPreSolve, this);
+            //PhysicsSystem2D.instance.on(Contact2DType.POST_SOLVE, this.onPostSolve, this);
+        }
+        
     }
 
     set curState (value: GameState) {
-        switch(value) {
-            case GameState.START:
-                this.init();
-                break;
-            case GameState.RUNNING:
-                if (this.startMenu) {
-                    this.startMenu.active = false;
+        
+        this.init();
+            
+        if (this.stepsLabel) {
+            this.stepsLabel.string = '0';   // 将步数重置为0
+            this.score = 0;
+            let scheduler = director.getScheduler();
+            scheduler.schedule(() => {
+                this.score += 1;
+                console.log("Score: " + this.score);
+                this.stepsLabel.string = '' + (this.score);
+                sys.localStorage.setItem("score" ,this.score.toString());//从全局中存储score值，在过程中将score转为string类型
+            }, this, 0.2, macro.REPEAT_FOREVER, 0, false);
+            
+                    
+                    /** 
+                    this.stepsLabel.string = '0';   // 将步数重置为0
+                    let moveIndex = 0
+                    this.stepsLabel.schedule(
+                        moveIndex += 1
+                    , 0.2);
+                    this.stepsLabel.string = '' + (moveIndex);
+                    */
                 }
+   
                 // 设置 active 为 true 时会直接开始监听鼠标事件，此时鼠标抬起事件还未派发
                 // 会出现的现象就是，游戏开始的瞬间人物已经开始移动
                 // 因此，这里需要做延迟处理
-                setTimeout(() => {
-                    if (this.playerCtrl) {
-                        this.playerCtrl.setInputActive(true);
-                        tween(this.node)
-                            .repeatForever(tween().by(5, { position: v3(0,-960, 0) }))
-                            .start();
-                    }
-                }, 0.1);
-                break;
-            case GameState.END:
-                break;
-        }
-    }
+        setTimeout(() => {
+            if (this.playerCtrl) {
+                this.playerCtrl.setInputActive(true);
+                tween(this.node)
+                    .repeatForever(tween().by(2, { position: v3(0,-960, 0) }))
+                    .start();
+            }
+        }, 0.1);
 
-    onStartButtonClicked() {
-        this.curState = GameState.RUNNING;
     }
 
     init(){
-        //激活主界面
-        if (this.startMenu) {
-            this.startMenu.active = true;
-        }
         this.generateRoad();
 
         // Initialize trackPositions array
@@ -188,7 +212,7 @@ export class GameManager extends Component {
         }
         }
     }
-
+//不断生成赛道
     generateRoad() {
         // 防止游戏重新开始时，赛道还是旧的赛道
         // 因此，需要移除旧赛道，清除旧赛道数据
@@ -211,7 +235,7 @@ export class GameManager extends Component {
             track.setPosition(0, j*960, 0);
         }
     }
-
+//生成赛道的预制体，实例化赛道
     spawnBlockByType(type: TrackType) {
         let track = instantiate(this.trackPrfb);
         return track;
@@ -235,22 +259,45 @@ export class GameManager extends Component {
 */
 
     }
+
+
+//碰撞
+    onBeginContact (selfCollider: Collider2D, otherCollider: Collider2D, contact: IPhysics2DContact | null) {
+        // 只在两个碰撞体开始接触时被调用一次
+        console.log('onBeginContact');
+        this.gameOver();
+    }
+    onEndContact (selfCollider: Collider2D, otherCollider: Collider2D, contact: IPhysics2DContact | null) {
+        // 只在两个碰撞体结束接触时被调用一次
+        console.log('onEndContact');
+    }
+    onPreSolve (selfCollider: Collider2D, otherCollider: Collider2D, contact: IPhysics2DContact | null) {
+        // 每次将要处理碰撞体接触逻辑时被调用
+        console.log('onPreSolve');
+    }
+    onPostSolve (selfCollider: Collider2D, otherCollider: Collider2D, contact: IPhysics2DContact | null) {
+        // 每次处理完碰撞体接触逻辑时被调用
+        console.log('onPostSolve');
+    }
+/** 
     //碰撞检查
-    onCollisionEnter(other, self) {
+    onCollisionEnter(selfCollider: Collider2D, otherCollider: Collider2D) {
         
-        if (other.node.name === 'player'&& self.node.name ==='obstacle') {
+        if (otherCollider.node.name === 'rabbit'&& selfCollider.node.name ==='obstacle') {
             this.gameOver();
         }
     }
-        
+*/
     gameOver() {
         // Show game over message
         log('Game Over!');
         // Show score
         log(`Your Score: ${this.score}`);
         // Restart game
-        director.loadScene('Main');
+        //director.loadScene('Main');
+        director.loadScene('GameOver');
     }   
+    
 }
 
 
